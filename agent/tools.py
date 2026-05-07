@@ -166,6 +166,7 @@ def query_press_releases(
     Returns:
         {"count": int, "releases": [{"date", "title", "category", "content"}]}
     """
+    limit = int(limit)
     if not PRESS_PATH.exists():
         return {"error": "Press releases file not found."}
 
