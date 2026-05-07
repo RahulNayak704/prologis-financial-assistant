@@ -1,6 +1,9 @@
 """
 Financial Assistant Web Application - Streamlit Frontend
 Tabs: Chat | Data Browser | ML Predictions
+
+Powered by Vertex AI (Gemini) function calling, AWS SageMaker, AWS Bedrock,
+and Postgres on Supabase.
 """
 import sys
 from pathlib import Path
@@ -23,61 +26,183 @@ st.set_page_config(
 )
 
 # --------------------------------------------------------------
-# Custom CSS for polish
+# Custom CSS — futuristic, glassy, professional
 # --------------------------------------------------------------
 st.markdown("""
 <style>
-    /* Tighten main padding */
-    .block-container { padding-top: 2rem; padding-bottom: 2rem; max-width: 1200px; }
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap');
 
-    /* Sidebar gradient */
+    /* Page background — radial gradient over deep navy */
+    .stApp {
+        background:
+            radial-gradient(circle at 20% 0%, rgba(99, 102, 241, 0.08) 0%, transparent 50%),
+            radial-gradient(circle at 80% 100%, rgba(34, 211, 238, 0.06) 0%, transparent 50%),
+            #0a0e1a;
+    }
+
+    .block-container {
+        padding-top: 2rem;
+        padding-bottom: 3rem;
+        max-width: 1280px;
+    }
+
+    /* Sidebar */
     [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+        background: linear-gradient(180deg, rgba(15, 23, 42, 0.95) 0%, rgba(10, 14, 26, 0.98) 100%);
+        backdrop-filter: blur(20px);
+        border-right: 1px solid rgba(148, 163, 184, 0.1);
     }
-    [data-testid="stSidebar"] h1 { color: #60a5fa; font-size: 1.5rem; }
-    [data-testid="stSidebar"] hr { border-color: rgba(255,255,255,0.1); }
-
-    /* Tabs styling — bigger, more breathing room */
-    .stTabs [data-baseweb="tab-list"] { gap: 8px; }
-    .stTabs [data-baseweb="tab"] {
-        height: 44px;
-        padding: 0 20px;
-        background-color: rgba(96, 165, 250, 0.05);
-        border-radius: 8px 8px 0 0;
+    [data-testid="stSidebar"] h1 {
+        font-family: 'Space Grotesk', sans-serif;
+        background: linear-gradient(135deg, #22d3ee 0%, #818cf8 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-size: 1.6rem;
+        letter-spacing: -0.02em;
     }
-    .stTabs [aria-selected="true"] {
-        background-color: rgba(96, 165, 250, 0.15);
+    [data-testid="stSidebar"] hr {
+        border-color: rgba(148, 163, 184, 0.15);
+        margin: 1.2rem 0;
+    }
+    [data-testid="stSidebar"] h3 {
+        color: #94a3b8;
+        font-size: 0.75rem;
         font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        margin-bottom: 0.6rem;
+    }
+    [data-testid="stSidebar"] li { color: #e2e8f0; font-size: 0.9rem; }
+    [data-testid="stSidebar"] code {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.7rem;
+        color: #67e8f9;
+        background: rgba(34, 211, 238, 0.08);
+        border: 1px solid rgba(34, 211, 238, 0.15);
+        border-radius: 6px;
     }
 
-    /* Chat message styling */
+    /* Main heading gradient */
+    .main h1, .main h2 { font-family: 'Space Grotesk', sans-serif; letter-spacing: -0.02em; }
+    .main h1 {
+        background: linear-gradient(135deg, #f0f9ff 0%, #a5b4fc 50%, #67e8f9 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-size: 2.4rem;
+        font-weight: 700;
+    }
+
+    /* Tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 6px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 48px;
+        padding: 0 24px;
+        background: rgba(30, 41, 59, 0.4);
+        backdrop-filter: blur(8px);
+        border-radius: 10px 10px 0 0;
+        border: 1px solid rgba(148, 163, 184, 0.08);
+        border-bottom: none;
+        color: #94a3b8;
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }
+    .stTabs [data-baseweb="tab"]:hover { background: rgba(99, 102, 241, 0.1); color: #e2e8f0; }
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(34, 211, 238, 0.15) 100%) !important;
+        color: #f0f9ff !important;
+        border-color: rgba(129, 140, 248, 0.3) !important;
+        box-shadow: 0 0 20px rgba(99, 102, 241, 0.15);
+    }
+
+    /* Chat messages */
     [data-testid="stChatMessage"] {
-        background-color: rgba(30, 41, 59, 0.4);
-        border-radius: 12px;
-        padding: 12px 16px;
-        margin-bottom: 8px;
+        background: rgba(30, 41, 59, 0.5);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(148, 163, 184, 0.1);
+        border-radius: 14px;
+        padding: 14px 18px;
+        margin-bottom: 10px;
     }
 
     /* Buttons */
     .stButton button {
-        background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #06b6d4 100%);
+        background-size: 200% 200%;
         color: white;
         border: none;
         font-weight: 600;
-        padding: 0.5rem 1.5rem;
-        border-radius: 8px;
-        transition: transform 0.15s;
+        font-family: 'Space Grotesk', sans-serif;
+        padding: 0.6rem 1.6rem;
+        border-radius: 10px;
+        letter-spacing: 0.02em;
+        box-shadow: 0 4px 20px rgba(99, 102, 241, 0.25);
+        transition: all 0.2s ease;
     }
-    .stButton button:hover { transform: translateY(-1px); }
+    .stButton button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 28px rgba(99, 102, 241, 0.4);
+        background-position: 100% 0%;
+    }
 
-    /* Section headers a touch larger */
-    h1 { font-size: 2.2rem; }
-    h2 { font-size: 1.6rem; }
+    /* Form: text input on top */
+    .stTextInput input {
+        background: rgba(30, 41, 59, 0.6) !important;
+        border: 1px solid rgba(129, 140, 248, 0.25) !important;
+        border-radius: 12px !important;
+        color: #f0f9ff !important;
+        font-size: 0.95rem !important;
+        padding: 0.75rem 1rem !important;
+    }
+    .stTextInput input:focus {
+        border-color: rgba(34, 211, 238, 0.5) !important;
+        box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.15) !important;
+    }
 
-    /* Code blocks (sidebar endpoint names) */
-    [data-testid="stSidebar"] code {
-        font-size: 0.7rem;
-        word-break: break-all;
+    /* Metric cards */
+    [data-testid="stMetric"] {
+        background: rgba(30, 41, 59, 0.4);
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(148, 163, 184, 0.1);
+        border-radius: 12px;
+        padding: 14px 18px;
+    }
+    [data-testid="stMetricValue"] {
+        font-family: 'Space Grotesk', sans-serif;
+        background: linear-gradient(135deg, #67e8f9 0%, #818cf8 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+
+    /* Expanders */
+    [data-testid="stExpander"] {
+        background: rgba(30, 41, 59, 0.3);
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(148, 163, 184, 0.1);
+        border-radius: 10px;
+    }
+    [data-testid="stExpander"] summary { color: #94a3b8; font-size: 0.85rem; }
+
+    /* Dataframes */
+    [data-testid="stDataFrame"] {
+        border: 1px solid rgba(148, 163, 184, 0.1);
+        border-radius: 10px;
+        overflow: hidden;
+    }
+
+    code, pre { font-family: 'JetBrains Mono', monospace !important; }
+
+    /* Newest message highlight */
+    .latest-card {
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(34, 211, 238, 0.08) 100%);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(129, 140, 248, 0.3);
+        border-radius: 14px;
+        padding: 16px 20px;
+        margin-bottom: 12px;
+        box-shadow: 0 0 24px rgba(99, 102, 241, 0.1);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -96,7 +221,6 @@ def get_db_engine():
 
 
 def invoke_sagemaker(endpoint_name, payload):
-    """Call a SageMaker endpoint with a JSON payload."""
     import boto3
     region = os.getenv("AWS_REGION", "us-east-1")
     runtime = boto3.client("sagemaker-runtime", region_name=region)
@@ -110,7 +234,6 @@ def invoke_sagemaker(endpoint_name, payload):
 
 
 def safe_md(text):
-    """Escape $ to prevent LaTeX rendering inside chat answers."""
     if not text:
         return text
     return text.replace("$", "\\$")
@@ -125,30 +248,30 @@ with st.sidebar:
     st.divider()
     st.markdown("### 📂 Data Sources")
     st.markdown("""
-    - **SEC EDGAR** — 10-K / 10-Q filings
-    - **Postgres** — properties + financials
-    - **Press Releases** — JSON store
-    """)
+- **SEC EDGAR** — 10-K / 10-Q filings
+- **Postgres** — properties + financials
+- **Press Releases** — JSON store
+""")
     st.divider()
     st.markdown("### ☁️ Cloud Services")
     st.markdown("""
-    - 🤖 **Gemini 2.5 Flash** — agent
-    - 🔮 **AWS SageMaker** — ML endpoints
-    - 📝 **AWS Bedrock** — summarization
-    """)
+- 🤖 **Vertex AI** — Gemini 2.5 Flash agent (function calling)
+- 🔮 **AWS SageMaker** — ML model endpoints
+- 📝 **AWS Bedrock** — Claude Haiku summarization
+""")
     st.divider()
     st.markdown("### 🚀 ML Endpoints")
     reg_ep = os.getenv("SAGEMAKER_REGRESSION_ENDPOINT", "(not deployed)")
     clf_ep = os.getenv("SAGEMAKER_CLASSIFICATION_ENDPOINT", "(not deployed)")
     st.code(f"reg: {reg_ep}\nclf: {clf_ep}", language=None)
     st.divider()
-    st.caption("Built for CS5500 Financial Assistant assignment.")
+    st.caption("Multi-cloud AI assignment · GCP + AWS")
 
 # --------------------------------------------------------------
 # Main header
 # --------------------------------------------------------------
 st.title("🏢 Prologis Financial Assistant")
-st.caption("End-to-end AI system: structured data + classic ML + generative AI on Postgres, AWS SageMaker, AWS Bedrock, and Google Gemini.")
+st.caption("End-to-end AI system: structured data + classic ML + generative AI on Postgres, AWS SageMaker, AWS Bedrock, and Google Vertex AI.")
 
 # --------------------------------------------------------------
 # Tabs
@@ -156,70 +279,100 @@ st.caption("End-to-end AI system: structured data + classic ML + generative AI o
 tab_chat, tab_data, tab_ml = st.tabs(["💬 Chat", "📊 Data", "🤖 ML Predictions"])
 
 # ============================================================
-# TAB 1: CHAT
+# TAB 1: CHAT — newest-on-top, input pinned at top
 # ============================================================
 with tab_chat:
     st.subheader("Conversational Assistant")
-    st.caption("Ask about financials, properties, or recent press releases. The agent uses Gemini function calling to route your question to the right data source.")
+    st.caption("Ask about financials, properties, or recent press releases. Powered by Vertex AI Gemini function calling — automatically routes your question across Postgres, SEC EDGAR, press releases, and AWS Bedrock.")
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
+    if "input_counter" not in st.session_state:
+        st.session_state.input_counter = 0
 
-    # Example queries
-    with st.expander("💡 Example queries", expanded=len(st.session_state.messages) == 0):
-        cols = st.columns(2)
-        examples = [
-            "What was Prologis' net income last year?",
-            "Show industrial properties in Chicago with revenue.",
-            "Did Prologis announce any acquisitions recently?",
-            "Summarize the most recent earnings press release.",
-            "Compare property revenues between Dallas and Phoenix.",
-            "Which metro has the highest average revenue per property?",
-        ]
-        for i, ex in enumerate(examples):
-            with cols[i % 2]:
-                st.markdown(f"- _{ex}_")
+    # Input form at the top — using a form so Enter submits
+    with st.form(key=f"chat_form_{st.session_state.input_counter}", clear_on_submit=True):
+        col_input, col_submit = st.columns([6, 1])
+        with col_input:
+            user_input = st.text_input(
+                "Ask a question",
+                placeholder="Ask a question about Prologis...",
+                label_visibility="collapsed",
+            )
+        with col_submit:
+            submitted = st.form_submit_button("Ask 🚀", use_container_width=True)
 
-    # Render past messages (newest at bottom, like a real chat)
-    for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.markdown(safe_md(msg["content"]))
+    if st.session_state.messages:
+        if st.button("🗑️ Clear chat", key="clear_chat"):
+            st.session_state.messages = []
+            st.rerun()
+
+    # Process new message
+    if submitted and user_input.strip():
+        prompt = user_input.strip()
+        try:
+            from agent.agent import run_agent
+            with st.spinner("Thinking..."):
+                result = run_agent(prompt)
+            # Insert at the FRONT so newest renders on top
+            st.session_state.messages.insert(0, {
+                "user": prompt,
+                "assistant": result["answer"],
+                "tool_calls": result["tool_calls"],
+            })
+        except Exception as e:
+            import traceback
+            st.session_state.messages.insert(0, {
+                "user": prompt,
+                "assistant": f"⚠️ Agent error: {e}",
+                "tool_calls": [],
+                "traceback": traceback.format_exc(),
+            })
+        st.session_state.input_counter += 1
+        st.rerun()
+
+    # Example queries (only when no messages yet)
+    if not st.session_state.messages:
+        with st.expander("💡 Example queries", expanded=True):
+            cols = st.columns(2)
+            examples = [
+                "What was Prologis' net income last year?",
+                "Show industrial properties in Chicago with revenue.",
+                "Did Prologis announce any acquisitions recently?",
+                "Summarize the most recent earnings press release.",
+                "Compare property revenues between Dallas and Phoenix.",
+                "Which metro has the highest average revenue per property?",
+            ]
+            for i, ex in enumerate(examples):
+                with cols[i % 2]:
+                    st.markdown(f"- _{ex}_")
+
+    # Render messages — newest first (already inserted at front)
+    for idx, msg in enumerate(st.session_state.messages):
+        # Highlight only the most recent (idx == 0)
+        is_latest = (idx == 0)
+        wrapper_class = "latest-card" if is_latest else ""
+        if is_latest:
+            st.markdown('<div class="latest-card">', unsafe_allow_html=True)
+
+        with st.chat_message("user"):
+            st.markdown(safe_md(msg["user"]))
+        with st.chat_message("assistant"):
+            st.markdown(safe_md(msg["assistant"]))
             if msg.get("tool_calls"):
                 with st.expander(f"🔧 {len(msg['tool_calls'])} tool call(s)"):
                     for c in msg["tool_calls"]:
-                        st.markdown(f"**{c['name']}**(`{c['args']}`)")
+                        st.markdown(f"**`{c['name']}`**(`{c['args']}`)")
                         st.json(c["result"], expanded=False)
-
-    # Chat input — Streamlit pins this at the bottom of the screen
-    if prompt := st.chat_input("Ask a question about Prologis..."):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(safe_md(prompt))
-
-        with st.chat_message("assistant"):
-            try:
-                from agent.agent import run_agent
-                with st.spinner("Thinking..."):
-                    result = run_agent(prompt)
-                st.markdown(safe_md(result["answer"]))
-                if result["tool_calls"]:
-                    with st.expander(f"🔧 {len(result['tool_calls'])} tool call(s)"):
-                        for c in result["tool_calls"]:
-                            st.markdown(f"**{c['name']}**(`{c['args']}`)")
-                            st.json(c["result"], expanded=False)
-                st.session_state.messages.append({
-                    "role": "assistant",
-                    "content": result["answer"],
-                    "tool_calls": result["tool_calls"],
-                })
-            except Exception as e:
-                import traceback
-                err = f"⚠️ Agent error: {e}"
-                st.error(err)
+            if msg.get("traceback"):
                 with st.expander("Traceback"):
-                    st.code(traceback.format_exc())
-                st.session_state.messages.append({"role": "assistant", "content": err})
+                    st.code(msg["traceback"])
 
+        if is_latest:
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        if not is_latest:
+            st.markdown("<hr style='border-color: rgba(148,163,184,0.08); margin: 0.5rem 0;'/>", unsafe_allow_html=True)
 
 # ============================================================
 # TAB 2: DATA BROWSER
@@ -256,7 +409,6 @@ with tab_data:
                 view = view[view["metro_area"].isin(metro_filter)]
             if type_filter:
                 view = view[view["property_type"].isin(type_filter)]
-            # Summary stats
             mcol1, mcol2, mcol3, mcol4 = st.columns(4)
             mcol1.metric("Properties", len(view))
             mcol2.metric("Total revenue", f"${view['revenue'].sum()/1e6:.1f}M")
