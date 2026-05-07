@@ -98,7 +98,7 @@ with tab_chat:
     # Render past messages
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+            st.markdown(msg["content"].replace("$", "\\$"))
             if msg.get("tool_calls"):
                 with st.expander(f"🔧 Tools used: {', '.join(c['name'] for c in msg['tool_calls'])}"):
                     for c in msg["tool_calls"]:
@@ -117,7 +117,7 @@ with tab_chat:
                 from agent.agent import run_agent
                 with st.spinner("Thinking..."):
                     result = run_agent(prompt)
-                st.markdown(result["answer"])
+                st.markdown(result["answer"].replace("$", "\\$"))
                 if result["tool_calls"]:
                     with st.expander(f"🔧 Tools used: {', '.join(c['name'] for c in result['tool_calls'])}"):
                         for c in result["tool_calls"]:

@@ -4,7 +4,6 @@
 __pycache__/
 *.pyc
 .DS_Store
-data/sec/*.json
 ml/classification/data/*.csv
 ml/regression/model.joblib
 ml/regression/model.tar.gz
