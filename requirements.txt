@@ -16,8 +16,8 @@ joblib==1.4.2
 boto3==1.35.60
 sagemaker==2.232.2
 
-# GCP / Gemini
-google-generativeai==0.8.3
+# GCP / Genai
+google-genai>=0.3.0
 
 # Data fetching
 requests==2.32.3
