@@ -1,0 +1,17 @@
+.env
+.env.local
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+data/sec/*.json
+ml/classification/data/*.csv
+ml/regression/model.joblib
+ml/regression/model.tar.gz
+ml/regression/metrics.json
+ml/regression/code/
+ml/classification/model.joblib
+ml/classification/model.tar.gz
+ml/classification/metrics.json
+ml/classification/code/
+.streamlit/secrets.toml
