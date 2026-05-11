@@ -2,7 +2,9 @@
 
 End-to-end AI-powered Financial Assistant Web Application for **Prologis (NYSE: PLD)**, a global industrial real estate investment trust. The platform combines structured data querying, classic machine learning (regression and classification), and generative AI to retrieve financial and property insights, perform predictive analytics, and provide natural-language summaries.
 
-Built as a multi-cloud system: Postgres for structured data, AWS SageMaker for ML model hosting, Google Gemini (with function calling) for the conversational agent, and AWS Bedrock (Claude Haiku) for summarization.
+Built as a multi-cloud system: Postgres on Supabase for structured data, AWS SageMaker for ML model hosting, **Google Cloud Vertex AI** for the conversational agent (with function calling, the primitive that underpins the Vertex AI Agent Development Kit), and AWS Bedrock (Claude Haiku) for summarization.
+
+**Live deployment:** [https://prologis-financial-assistant.streamlit.app/](https://prologis-financial-assistant.streamlit.app/)
 
 ---
 
@@ -15,9 +17,10 @@ Built as a multi-cloud system: Postgres for structured data, AWS SageMaker for M
                         └──────┬──────────┬──────────────┬────────────┘
                                │          │              │
                 ┌──────────────┴──┐    ┌──┴──────┐   ┌───┴──────────────┐
-                │  Gemini Agent   │    │ Postgres│   │ AWS SageMaker    │
-                │  (function      │    │ (props +│   │  • RF Regressor  │
-                │   calling)      │    │ financs)│   │  • LR Classifier │
+                │  Vertex AI      │    │ Postgres│   │ AWS SageMaker    │
+                │  Gemini 2.5     │    │ (props +│   │  • RF Regressor  │
+                │  + function     │    │ financs)│   │  • LR Classifier │
+                │  calling (ADK)  │    │         │   │                  │
                 └────┬───┬───┬────┘    └─────────┘   └──────────────────┘
                      │   │   │
         ┌────────────┘   │   └──────────────┐
@@ -30,9 +33,11 @@ Built as a multi-cloud system: Postgres for structured data, AWS SageMaker for M
 ```
 
 **Cloud services used:**
-- **Google Gemini 2.5 Flash** — agent reasoning + function calling (AI Studio API)
+- **Google Cloud Vertex AI** — Gemini 2.5 Flash agent using function calling (the underlying primitive of the Vertex AI Agent Development Kit)
 - **AWS SageMaker** — hosted endpoints for the regression and classification models
-- **AWS Bedrock** — Claude Haiku 4.5 for press-release summarization (multi-cloud requirement)
+- **AWS Bedrock** — Claude Haiku 4.5 for press-release summarization (multi-cloud integration)
+- **Supabase Postgres** — properties + financials database
+- **Streamlit Community Cloud** — public web app hosting
 
 ---
 
@@ -40,11 +45,11 @@ Built as a multi-cloud system: Postgres for structured data, AWS SageMaker for M
 
 | Source | Format | Records | Purpose |
 |---|---|---|---|
-| **SEC EDGAR** | JSON (XBRL company facts API) | Latest 10-K/10-Q metrics | Authoritative financial data: revenue, net income, operating expenses, total assets/liabilities |
-| **Postgres** | `properties` + `financials` tables | 20 properties across 9 US metros | Property-level revenue/expense queries |
+| **SEC EDGAR** | JSON (XBRL Company Facts API) | Latest 10-K / 10-Q metrics | Authoritative financial data: revenue, net income, operating expenses, total assets/liabilities |
+| **Postgres** | `properties` + `financials` tables | 20 properties across 11 US metros | Property-level revenue/expense queries |
 | **Press releases** | JSON | 10 mocked Prologis releases | Acquisitions, expansions, earnings, sustainability announcements |
 
-The 20 sample properties span Los Angeles, Chicago, New York, Kansas City, Dallas, Miami, Seattle, Phoenix, Portland, Philadelphia, and Atlanta, with mixed Industrial / Logistics / Warehouse types.
+The 20 sample properties span Los Angeles, Chicago, New York, Kansas City, Dallas, Miami, Seattle, Phoenix, Portland, Philadelphia, and Atlanta with mixed Industrial / Logistics / Warehouse types.
 
 ---
 
@@ -53,9 +58,9 @@ The 20 sample properties span Los Angeles, Chicago, New York, Kansas City, Dalla
 ```
 financial-assistant/
 ├── agent/
-│   ├── tools.py            # 3 tool functions exposed to Gemini
+│   ├── tools.py            # 3 tool functions exposed to the agent
 │   ├── bedrock.py          # AWS Bedrock summarization helper
-│   └── agent.py            # Gemini agent with function calling
+│   └── agent.py            # Vertex AI agent with function calling
 ├── app/
 │   └── streamlit_app.py    # 3-tab Streamlit frontend
 ├── data/
@@ -65,15 +70,18 @@ financial-assistant/
 │   ├── schema.sql          # properties + financials tables
 │   └── seed.sql            # 20 sample properties + financials
 ├── ml/
-│   ├── regression/         # California Housing → Random Forest
+│   ├── regression/         # California Housing -> Random Forest
 │   │   ├── train.py
 │   │   ├── inference.py    # SageMaker inference handler
 │   │   └── metrics.json
-│   ├── classification/     # UCI Bank Marketing → Logistic Regression
+│   ├── classification/     # UCI Bank Marketing -> Logistic Regression
 │   │   ├── train.py
 │   │   ├── inference.py
 │   │   └── metrics.json
 │   └── plots/              # rendered metric/feature plots
+├── notebooks/
+│   ├── regression_training.ipynb
+│   └── classification_training.ipynb
 ├── scripts/
 │   ├── fetch_sec.py        # pull SEC EDGAR data
 │   ├── deploy_sagemaker.py # deploy both endpoints
@@ -90,9 +98,9 @@ financial-assistant/
 ### Prerequisites
 
 - macOS / Linux with Python 3.9 (the SageMaker sklearn 1.2-1 container expects 3.9 — using a matching local env avoids pickle compatibility issues)
-- Postgres 15+
+- Postgres 15+ (or a Supabase Postgres project)
 - AWS account with Bedrock and SageMaker access
-- Google AI Studio API key
+- Google Cloud project with Vertex AI enabled (Express Mode works without billing for 90 days)
 
 ### Local environment
 
@@ -110,6 +118,9 @@ pip install -r requirements.txt
 
 ### Postgres
 
+Two paths — local for development, Supabase for the deployed app.
+
+**Local (development):**
 ```bash
 brew install postgresql@15
 brew services start postgresql@15
@@ -119,14 +130,35 @@ psql -h localhost -U postgres -d financial_assistant -f db/schema.sql
 psql -h localhost -U postgres -d financial_assistant -f db/seed.sql
 ```
 
-Verify with `psql -h localhost -U postgres -d financial_assistant -c "SELECT COUNT(*) FROM properties;"` — should return `20`.
+**Supabase (deployed app):**
+1. Create a free Supabase project at https://supabase.com
+2. Open the SQL editor and run `db/schema.sql` then `db/seed.sql`
+3. Grab the connection string under Project Settings → Database → Connection string → Session pooler
+4. Use the host, port, db, user, password values in `.env`
+
+Verify with `psql ... -c "SELECT COUNT(*) FROM properties;"` — should return `20`.
+
+### Vertex AI
+
+The chatbot routes through **Google Cloud Vertex AI** using the unified `google-genai` SDK. The agent declares tool schemas and Gemini decides which tools to call — this is the same function-calling primitive the **Vertex AI Agent Development Kit (ADK)** is built on.
+
+1. Open https://console.cloud.google.com/vertex-ai (now branded as "Agent Platform")
+2. Click "Enable APIs" — Express Mode allows 90 days of free Vertex AI access without billing
+3. Click "Get API key" in the left sidebar and copy the key
+4. Add to `.env`:
+   ```
+   GOOGLE_API_KEY=AIza...
+   GOOGLE_GENAI_USE_VERTEXAI=True
+   ```
 
 ### Environment variables
 
 ```bash
 cp .env.example .env
 # Then edit .env to fill in your real values:
-#   GEMINI_API_KEY    — from https://aistudio.google.com/apikey
+#   GOOGLE_API_KEY            -- Vertex AI Express Mode key
+#   GOOGLE_GENAI_USE_VERTEXAI -- set to True
+#   POSTGRES_*                -- Supabase or local Postgres credentials
 #   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
 #   SAGEMAKER_BUCKET, SAGEMAKER_ROLE_ARN
 ```
@@ -143,6 +175,8 @@ This populates `data/sec/prologis_financials.json` with the latest annual + quar
 ---
 
 ## Machine learning models
+
+Full notebooks with EDA, training, and evaluation are in `notebooks/`.
 
 ### Regression — Random Forest on California Housing
 
@@ -201,13 +235,13 @@ python scripts/deploy_sagemaker.py
 
 This script:
 1. Tarballs each `model.joblib` to S3
-2. Creates a SageMaker `SKLearnModel` for each, pointing to the local `inference.py` as `source_dir` (the SDK uploads it and configures the container automatically)
+2. Creates a SageMaker `SKLearnModel` for each, pointing to the local `inference.py` as `source_dir`
 3. Deploys to `ml.t2.medium` instances using the `1.2-1` sklearn framework container (Python 3.9, sklearn 1.2.x)
 4. Auto-populates `SAGEMAKER_REGRESSION_ENDPOINT` and `SAGEMAKER_CLASSIFICATION_ENDPOINT` in `.env`
 
 Total deploy time: ~12 minutes for both endpoints.
 
-**Endpoints can be invoked from any code with `boto3.client('sagemaker-runtime').invoke_endpoint(...)` and accept JSON.** Both inference scripts (`ml/*/inference.py`) implement the standard SageMaker contract: `model_fn`, `input_fn`, `predict_fn`, `output_fn`.
+Both inference scripts (`ml/*/inference.py`) implement the standard SageMaker contract: `model_fn`, `input_fn`, `predict_fn`, `output_fn`.
 
 To clean up after the demo:
 ```bash
@@ -218,13 +252,13 @@ python scripts/delete_endpoints.py
 
 ## Conversational agent
 
-The agent is built using Google's Generative AI SDK (Gemini 2.5 Flash) with function calling. The same agent pattern (tool declaration, function calling, multi-turn orchestration) is used by Vertex AI ADK; this implementation is portable to Vertex AI by swapping the client initialization.
+The agent uses the **unified `google-genai` SDK** routed through **Google Cloud Vertex AI** in Express Mode. The agent declares four tool schemas; Gemini 2.5 Flash decides which tools to call and in what order. This is the same function-calling primitive that powers the Vertex AI Agent Development Kit.
 
 ### Tools available to the agent
 
 | Tool | Purpose | Backed by |
 |---|---|---|
-| `query_postgres(metro_area, property_type, min_revenue)` | Filter properties + financials | Postgres |
+| `query_postgres(metro_area, property_type, min_revenue)` | Filter properties + financials | Postgres (Supabase) |
 | `query_sec_edgar(metric, period)` | Look up Prologis revenue, net income, etc. | SEC EDGAR JSON cache |
 | `query_press_releases(keywords, category)` | Search press releases by topic | JSON store |
 | `summarize_with_bedrock(text, max_words)` | Condense long text to N words | **AWS Bedrock (Claude Haiku 4.5)** ← multi-cloud |
@@ -232,7 +266,7 @@ The agent is built using Google's Generative AI SDK (Gemini 2.5 Flash) with func
 ### How the agent routes a query
 
 1. User asks a natural-language question in the Chat tab
-2. Gemini reads the question and the registered tool schemas
+2. Vertex AI Gemini reads the question and the registered tool schemas
 3. The model emits one or more `function_call` blocks naming the tool and arguments
 4. The orchestrator (`agent/agent.py`) executes each tool locally and feeds results back
 5. Gemini composes a final natural-language answer grounded in the returned data
@@ -250,6 +284,8 @@ The agent is built using Google's Generative AI SDK (Gemini 2.5 Flash) with func
 
 The Streamlit Chat tab shows a "🔧 Tools used" expander under each response, displaying which tools fired and what they returned — useful for transparency and debugging.
 
+The final example demonstrates the **multi-cloud agentic chain**: a Vertex AI request triggers an AWS Bedrock summarization call within a single user query.
+
 ---
 
 ## Running the app
@@ -260,8 +296,8 @@ streamlit run app/streamlit_app.py
 
 The app has three tabs:
 
-- **💬 Chat** — natural-language Q&A backed by the Gemini agent
-- **📊 Data** — Properties (Postgres dataframe with metro/type filters), SEC Filings (latest annual values), Press Releases (expandable list)
+- **💬 Chat** — natural-language Q&A backed by the Vertex AI agent
+- **📊 Data** — Properties (Postgres dataframe with metro/type filters), SEC Filings (latest annual values), Press Releases (expandable list with category filter)
 - **🤖 ML Predictions** — Sliders/dropdowns that POST to the live SageMaker endpoints and display predictions in real time
 
 ---
@@ -270,20 +306,21 @@ The app has three tabs:
 
 | Cloud | Service | Component |
 |---|---|---|
-| **GCP** | Gemini 2.5 Flash (AI Studio) | Conversational agent / function-calling orchestrator |
+| **GCP** | Vertex AI (Gemini 2.5 Flash) | Conversational agent / function-calling orchestrator |
 | **AWS** | SageMaker | Two hosted ML endpoints (regression + classification) |
 | **AWS** | Bedrock (Claude Haiku 4.5) | Press-release summarization |
 | **AWS** | S3 | Model artifact storage |
 | **AWS** | IAM | SageMaker execution role + CLI user |
-| **Local** | Postgres 15 | Properties + financials |
+| **AWS** | Supabase (managed Postgres) | Properties + financials |
 
-The cross-cloud design is functional, not just decorative: queries that need a press release summary call **Bedrock**, predictions go to **SageMaker**, agent reasoning happens in **Gemini**.
+The cross-cloud design is functional, not just decorative: queries that need a press release summary call **Bedrock** (AWS), predictions go to **SageMaker** (AWS), agent reasoning happens in **Vertex AI** (GCP).
 
 ---
 
 ## Known limitations
 
 - The Postgres seed is synthetic (revenue/net-income figures scaled from square footage with noise) — the SEC EDGAR data is real
-- Press releases are mocked (the assignment explicitly allows this); real Prologis press releases would be obtained via Investor Relations RSS or scraping
+- Press releases are mocked (the assignment explicitly allows this); a production version would use Prologis Investor Relations RSS or scraping
 - The SageMaker container is constrained to sklearn 1.2.x and Python 3.9 (the latest version AWS publishes); the local training env mirrors these versions to keep pickle formats compatible
+- Vertex AI Express Mode is a 90-day free window; production deployment would switch to billing-enabled Vertex AI with service account authentication for Streamlit Cloud
 - Bedrock model availability is region-specific; the project uses the `us-east-1` cross-region inference profile for Claude Haiku 4.5
